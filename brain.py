@@ -43,30 +43,27 @@ Personality:
 - You can be sassy or teasing sometimes
 
 CRITICAL RULES:
-- You have MEMORY. You know facts about the user listed below. USE THEM naturally in conversation.
+- You have MEMORY. You know facts about the user listed below. USE THEM naturally.
 - Never use emojis
 - Keep responses under 80 characters
 - Don't mention water unless user asks
 - Respond to what the user actually said
-- If user shares something about themselves (hobby, job, favorite thing, feeling), acknowledge it warmly
+- If user shares something about themselves, acknowledge it warmly
 """
 
 
 class NekoBrain:
     def __init__(self):
         self.user_name = None
-        self.user_facts = []          # facts about the user
+        self.user_facts = []
         self.conversation_history = []
         self.conversation_summary = ""
         self.water_count_today = 0
         self.last_water_time = None
         self.corrections = []
         self._loaded = False
-        self._last_summary_msg_count = 0
-        self._last_fact_msg_count = 0
 
         threading.Thread(target=self._load_from_firebase, daemon=True).start()
-        threading.Thread(target=self._summary_loop, daemon=True).start()
 
     # ========== FIREBASE ==========
 
@@ -94,7 +91,6 @@ class NekoBrain:
 
     def _load_from_firebase(self):
         try:
-            # User profile
             resp = requests.get(f"{FIREBASE_URL}/users/t4tokito",
                 params={"key": FIREBASE_CONFIG["apiKey"]}, timeout=10)
             if resp.status_code == 200:
@@ -107,14 +103,12 @@ class NekoBrain:
                 if corrections_raw:
                     self.corrections = json.loads(corrections_raw)
 
-            # Summary
             resp = requests.get(f"{FIREBASE_URL}/users/t4tokito/summary/latest",
                 params={"key": FIREBASE_CONFIG["apiKey"]}, timeout=10)
             if resp.status_code == 200:
                 data = resp.json().get("fields", {})
                 self.conversation_summary = data.get("text", {}).get("stringValue", "")
 
-            # Water
             resp = requests.get(f"{FIREBASE_URL}/users/t4tokito/habits/water",
                 params={"key": FIREBASE_CONFIG["apiKey"]}, timeout=10)
             if resp.status_code == 200:
@@ -122,21 +116,10 @@ class NekoBrain:
                 self.water_count_today = int(data.get("count", {}).get("integerValue", 0))
                 last = data.get("last_time", {}).get("stringValue")
                 if last:
-                    try: self.last_water_time = datetime.fromisoformat(last)
-                    except: pass
-
-            # Conversations
-            resp = requests.get(f"{FIREBASE_URL}/users/t4tokito/conversations",
-                params={"key": FIREBASE_CONFIG["apiKey"], "orderBy": "timestamp desc", "limit": "20"},
-                timeout=10)
-            if resp.status_code == 200:
-                docs = resp.json().get("documents", [])
-                self.conversation_history = [
-                    {"role": d.get("fields", {}).get("role", {}).get("stringValue", ""),
-                     "content": d.get("fields", {}).get("content", {}).get("stringValue", "")}
-                    for d in reversed(docs)
-                ]
-
+                    try:
+                        self.last_water_time = datetime.fromisoformat(last)
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"[NekoBrain] Load error: {e}")
         self._loaded = True
@@ -193,52 +176,47 @@ class NekoBrain:
             "count": self.water_count_today,
             "last_time": self.last_water_time.isoformat()})
 
-    # ========== FACT EXTRACTION (runs every 60s) ==========
+    # ========== SUMMARY + FACTS (on every new message) ==========
 
-    def _summary_loop(self):
-        while True:
-            time.sleep(60)
-            try:
-                all_convos = self._fetch_all_conversations()
-                if len(all_convos) < 2:
-                    continue
+    def _generate_summary(self, all_convos):
+        if len(all_convos) < 2:
+            return
+        try:
+            convo_text = "\n".join(
+                f"{'User' if c['role'] == 'user' else 'Neko'}: {c['content']}"
+                for c in all_convos)
+            resp = requests.post(OPENROUTER_URL,
+                headers={"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json",
+                         "HTTP-Referer": "https://neko-desktop.local"},
+                json={"model": OPENROUTER_MODEL, "max_tokens": 250, "temperature": 0.3,
+                      "messages": [
+                          {"role": "system", "content": "Summarize this entire conversation in 3-5 sentences. Focus on key topics, user preferences, important facts about the user, and ongoing context."},
+                          {"role": "user", "content": convo_text}]}, timeout=15)
+            if resp.status_code == 200:
+                self.conversation_summary = resp.json()["choices"][0]["message"]["content"].strip()
+                self._save_to_firebase("users/t4tokito/summary/latest", {
+                    "text": self.conversation_summary,
+                    "updated": datetime.now().isoformat(),
+                    "msg_count": len(all_convos)})
+                print(f"[NekoBrain] Summary: {self.conversation_summary[:80]}...")
+        except Exception as e:
+            print(f"[NekoBrain] Summary error: {e}")
 
-                # --- Summary ---
-                if len(all_convos) > self._last_summary_msg_count:
-                    self._last_summary_msg_count = len(all_convos)
-                    convo_text = "\n".join(
-                        f"{'User' if c['role'] == 'user' else 'Neko'}: {c['content']}"
-                        for c in all_convos)
-                    resp = requests.post(OPENROUTER_URL,
-                        headers={"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json",
-                                 "HTTP-Referer": "https://neko-desktop.local"},
-                        json={"model": OPENROUTER_MODEL, "max_tokens": 250, "temperature": 0.3,
-                              "messages": [
-                                  {"role": "system", "content": "Summarize this conversation in 3-5 sentences. Focus on key topics, user preferences, and facts about the user."},
-                                  {"role": "user", "content": convo_text}]}, timeout=15)
-                    if resp.status_code == 200:
-                        self.conversation_summary = resp.json()["choices"][0]["message"]["content"].strip()
-                        self._save_to_firebase("users/t4tokito/summary/latest", {
-                            "text": self.conversation_summary,
-                            "updated": datetime.now().isoformat(),
-                            "msg_count": len(all_convos)})
-                        print(f"[NekoBrain] Summary: {self.conversation_summary[:80]}...")
-
-                # --- Fact Extraction ---
-                if len(all_convos) > self._last_fact_msg_count:
-                    self._last_fact_msg_count = len(all_convos)
-                    user_msgs = [c["content"] for c in all_convos if c["role"] == "user"]
-                    if user_msgs:
-                        user_text = "\n".join(f"- {m}" for m in user_msgs[-30:])
-                        existing = "\n".join(f"- {f}" for f in self.user_facts) if self.user_facts else "(none)"
-                        resp = requests.post(OPENROUTER_URL,
-                            headers={"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json",
-                                     "HTTP-Referer": "https://neko-desktop.local"},
-                            json={"model": OPENROUTER_MODEL, "max_tokens": 200, "temperature": 0.2,
-                                  "messages": [
-                                      {"role": "system", "content": f"""Extract facts the USER shared about themselves from their messages.
-Return ONLY new facts as a JSON array of strings. Each fact should be one short sentence.
-Don't repeat existing facts. If no new facts, return empty array [].
+    def _extract_facts(self, all_convos):
+        try:
+            user_msgs = [c["content"] for c in all_convos if c["role"] == "user"]
+            if not user_msgs:
+                return
+            user_text = "\n".join(f"- {m}" for m in user_msgs[-30:])
+            existing = "\n".join(f"- {f}" for f in self.user_facts) if self.user_facts else "(none)"
+            resp = requests.post(OPENROUTER_URL,
+                headers={"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json",
+                         "HTTP-Referer": "https://neko-desktop.local"},
+                json={"model": OPENROUTER_MODEL, "max_tokens": 200, "temperature": 0.2,
+                      "messages": [
+                          {"role": "system", "content": f"""Extract facts the USER shared about themselves.
+Return ONLY new facts as a JSON array of strings. One fact per string.
+Don't repeat existing facts. If no new facts, return [].
 
 Existing facts:
 {existing}
@@ -246,37 +224,30 @@ Existing facts:
 User messages:
 {user_text}
 
-Return ONLY the JSON array, nothing else."""},
-                                      {"role": "user", "content": "Extract facts."}]}, timeout=15)
-                        if resp.status_code == 200:
-                            raw = resp.json()["choices"][0]["message"]["content"].strip()
-                            try:
-                                # Find JSON array in response
-                                start = raw.find("[")
-                                end = raw.rfind("]") + 1
-                                if start >= 0 and end > start:
-                                    new_facts = json.loads(raw[start:end])
-                                    if new_facts:
-                                        for f in new_facts:
-                                            if f not in self.user_facts:
-                                                self.user_facts.append(f)
-                                        self.user_facts = self.user_facts[-100:]
-                                        self.save_user_profile()
-                                        print(f"[NekoBrain] New facts: {new_facts}")
-                            except json.JSONDecodeError:
-                                pass
-
-            except Exception as e:
-                print(f"[NekoBrain] Loop error: {e}")
+Return ONLY the JSON array."""},
+                          {"role": "user", "content": "Extract facts."}]}, timeout=15)
+            if resp.status_code == 200:
+                raw = resp.json()["choices"][0]["message"]["content"].strip()
+                start = raw.find("[")
+                end = raw.rfind("]") + 1
+                if start >= 0 and end > start:
+                    new_facts = json.loads(raw[start:end])
+                    if new_facts:
+                        for f in new_facts:
+                            if f not in self.user_facts:
+                                self.user_facts.append(f)
+                        self.user_facts = self.user_facts[-100:]
+                        self.save_user_profile()
+                        print(f"[NekoBrain] New facts: {new_facts}")
+        except Exception as e:
+            print(f"[NekoBrain] Fact error: {e}")
 
     # ========== AI THINKING ==========
 
     def _build_context(self):
         self._fetch_recent_for_context()
 
-        # Build system prompt with all known info
         system = SYSTEM_PROMPT
-
         if self.user_name:
             system += f"\n\nThe user's name is {self.user_name}."
         if self.user_facts:
@@ -284,7 +255,7 @@ Return ONLY the JSON array, nothing else."""},
         if self.corrections:
             system += "\n\nCorrections from user:\n" + "\n".join(f"- {c}" for c in self.corrections[-5:])
         if self.conversation_summary:
-            system += f"\n\nSummary of earlier conversations:\n{self.conversation_summary}"
+            system += f"\n\nSummary of all earlier conversations:\n{self.conversation_summary}"
 
         messages = [{"role": "system", "content": system}]
         for msg in self.conversation_history[-20:]:
@@ -296,6 +267,19 @@ Return ONLY the JSON array, nothing else."""},
         if special:
             return special
 
+        # Step 1: Fetch ALL conversations from Firebase
+        all_convos = self._fetch_all_conversations()
+
+        # Step 2: Generate new summary from entire collection
+        self._generate_summary(all_convos)
+
+        # Step 3: Extract new user facts
+        self._extract_facts(all_convos)
+
+        # Step 4: Fetch last 20 messages for context
+        self._fetch_recent_for_context()
+
+        # Step 5: Build context (summary + facts + last 20 msgs) and respond
         messages = self._build_context()
         messages.append({"role": "user", "content": user_input})
 
@@ -323,7 +307,6 @@ Return ONLY the JSON array, nothing else."""},
     def _check_special(self, text):
         lower = text.lower().strip()
 
-        # Name
         if any(p in lower for p in ["my name is", "call me"]):
             for phrase in ["my name is", "call me"]:
                 if phrase in lower:
@@ -335,7 +318,6 @@ Return ONLY the JSON array, nothing else."""},
                         return f"Nice to meet you, {name}~! I'll remember that!"
             return None
 
-        # Water
         water_triggers = ["drank water", "had water", "water done", "drunk water", "drinking water"]
         if any(w == lower for w in water_triggers):
             self.save_water()
@@ -344,7 +326,6 @@ Return ONLY the JSON array, nothing else."""},
         if lower in ["how much water", "water count", "water today"]:
             return f"You've had {self.water_count_today} glasses of water today~!"
 
-        # What do you remember
         if "what do you know" in lower or "what do you remember" in lower:
             things = []
             if self.user_name:
@@ -357,7 +338,6 @@ Return ONLY the JSON array, nothing else."""},
                 return "I know that " + " and ".join(things) + "~! Ask me what I know!"
             return "Not much yet! Tell me about yourself~"
 
-        # Forget
         if "forget" in lower:
             self.user_facts.clear()
             self.corrections.clear()
