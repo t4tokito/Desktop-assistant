@@ -192,22 +192,39 @@ class ChatWindow(Gtk.Window):
         self.on_send = on_send
         self.get_style_context().add_class('chat-window')
 
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        vbox.set_margin_start(12)
+        vbox.set_margin_end(12)
+        vbox.set_margin_top(12)
+        vbox.set_margin_bottom(12)
 
-        header = Gtk.Label()
-        header.set_markup('<span foreground="white" font_weight="bold">  Neko</span>')
-        header.set_xalign(0)
-        header.get_style_context().add_class('chat-header')
-        header.set_size_request(-1, 36)
-        vbox.pack_start(header, False, False, 0)
+        # Header with "NEKO" + paw
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        header_box.get_style_context().add_class('chat-header')
+        header_box.set_size_request(-1, 60)
 
+        header_label = Gtk.Label()
+        header_label.set_markup('<span foreground="white" font_weight="bold" font_size="x-large">NEKO</span>')
+        header_label.set_xalign(0)
+        header_label.set_hexpand(True)
+        header_box.pack_start(header_label, True, True, 16)
+
+        paw_label = Gtk.Label()
+        paw_label.set_markup('<span font_size="xx-large">\U0001F43E</span>')
+        paw_label.set_xalign(1)
+        header_box.pack_end(paw_label, False, False, 16)
+
+        vbox.pack_start(header_box, False, False, 0)
+
+        # Messages area
         self.scroll = Gtk.ScrolledWindow()
         self.scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.msg_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.msg_box.set_margin_start(8)
-        self.msg_box.set_margin_end(8)
-        self.msg_box.set_margin_top(8)
-        self.msg_box.set_margin_bottom(8)
+        self.scroll.get_style_context().add_class('chat-scroll')
+        self.msg_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.msg_box.set_margin_start(4)
+        self.msg_box.set_margin_end(4)
+        self.msg_box.set_margin_top(12)
+        self.msg_box.set_margin_bottom(4)
         self.scroll.add(self.msg_box)
 
         viewport = self.scroll.get_child()
@@ -215,28 +232,38 @@ class ChatWindow(Gtk.Window):
             viewport.set_shadow_type(Gtk.ShadowType.NONE)
         vbox.pack_start(self.scroll, True, True, 0)
 
-        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        hbox.set_margin_start(8)
-        hbox.set_margin_end(8)
-        hbox.set_margin_bottom(8)
+        # Input bar
+        input_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        input_box.get_style_context().add_class('input-bar')
 
         self.entry = Gtk.Entry()
-        self.entry.set_placeholder_text("Say something...")
+        self.entry.set_placeholder_text("type here")
         self.entry.set_hexpand(True)
+        self.entry.set_height_request(44)
         self.entry.connect("activate", self._on_enter)
-        hbox.pack_start(self.entry, True, True, 0)
+        self.entry.get_style_context().add_class('chat-entry')
+        input_box.pack_start(self.entry, True, True, 0)
 
-        send_btn = Gtk.Button(label=">")
-        send_btn.set_size_request(36, 36)
+        send_btn = Gtk.Button()
+        send_btn.set_size_request(48, 48)
+        send_btn.get_style_context().add_class('send-btn')
+        send_label = Gtk.Label()
+        send_label.set_markup('<span font_size="large">\u25B6</span>')
+        send_btn.add(send_label)
         send_btn.connect("clicked", lambda _: self._on_enter(None))
-        hbox.pack_start(send_btn, False, False, 0)
+        input_box.pack_start(send_btn, False, False, 0)
 
-        screen_btn = Gtk.Button(label="\U0001F4F7")
-        screen_btn.set_size_request(36, 36)
+        screen_btn = Gtk.Button()
+        screen_btn.set_size_request(48, 48)
+        screen_btn.get_style_context().add_class('screen-btn')
+        cam_label = Gtk.Label()
+        cam_label.set_markup('<span font_size="large">\U0001F4F7</span>')
+        screen_btn.add(cam_label)
         screen_btn.connect("clicked", lambda _: self.on_send("__screen__"))
-        hbox.pack_start(screen_btn, False, False, 0)
+        input_box.pack_start(screen_btn, False, False, 0)
 
-        vbox.pack_start(hbox, False, False, 0)
+        vbox.pack_start(input_box, False, False, 0)
+
         self.add(vbox)
         self.add_message("Click me to chat! Use camera to show screen.", "system")
 
@@ -249,28 +276,48 @@ class ChatWindow(Gtk.Window):
         self.on_send(text)
 
     def add_message(self, text, msg_type="neko"):
-        label = Gtk.Label(label=text)
-        label.set_line_wrap(True)
-        label.set_max_width_chars(38)
         if msg_type == "user":
-            label.set_markup(f'<span foreground="white">{GLib.markup_escape_text(text)}</span>')
-            label.get_style_context().add_class('msg-user')
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            row.set_halign(Gtk.Align.END)
+            label = Gtk.Label(label=text)
+            label.set_line_wrap(True)
+            label.set_max_width_chars(30)
             label.set_xalign(1)
+            label.get_style_context().add_class('msg-user')
+            row.pack_start(label, False, False, 0)
+            self.msg_box.pack_start(row, False, False, 0)
+
         elif msg_type == "system":
-            label.set_markup(f'<span foreground="#aaa" font_size="small">{GLib.markup_escape_text(text)}</span>')
-            label.get_style_context().add_class('msg-system')
+            label = Gtk.Label()
+            label.set_markup(f'<span foreground="#888" font_size="small">{GLib.markup_escape_text(text)}</span>')
+            label.set_line_wrap(True)
             label.set_xalign(0.5)
+            label.get_style_context().add_class('msg-system')
+            self.msg_box.pack_start(label, False, False, 0)
+
         elif msg_type == "screen":
-            label.set_markup(f'<span foreground="#ddd">{GLib.markup_escape_text(text)}</span>')
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            row.set_halign(Gtk.Align.START)
+            label = Gtk.Label(label=text)
+            label.set_line_wrap(True)
+            label.set_max_width_chars(30)
+            label.set_xalign(0)
             label.get_style_context().add_class('msg-screen')
+            row.pack_start(label, False, False, 0)
+            self.msg_box.pack_start(row, False, False, 0)
+
+        else:  # neko
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            row.set_halign(Gtk.Align.START)
+            label = Gtk.Label(label=text)
+            label.set_line_wrap(True)
+            label.set_max_width_chars(30)
             label.set_xalign(0)
-        else:
-            label.set_markup(f'<span foreground="#eee">{GLib.markup_escape_text(text)}</span>')
             label.get_style_context().add_class('msg-neko')
-            label.set_xalign(0)
-        self.msg_box.pack_start(label, False, False, 0)
+            row.pack_start(label, False, False, 0)
+            self.msg_box.pack_start(row, False, False, 0)
+
         self.msg_box.show_all()
-        # Scroll to bottom
         adj = self.scroll.get_vadjustment()
         adj.set_value(adj.get_upper())
 
@@ -506,16 +553,85 @@ class NekoAssistant(Gtk.Window):
 
 def apply_css():
     css = b"""
-    .chat-window { background-color: #111; }
-    .bubble { background: rgba(255, 255, 255, 0.95); border: 2px solid #FFB3C1; border-radius: 14px; }
-    .chat-header { background: linear-gradient(135deg, #FF8FA0, #FF6B81); color: white; font-weight: bold; }
-    .msg-user { background: #FF8FA0; border-radius: 12px; padding: 6px 10px; margin: 2px 4px; }
-    .msg-neko { background: #2a2a2a; border: 1px solid #444; color: #eee; border-radius: 12px; padding: 6px 10px; margin: 2px 4px; }
-    .msg-system { background: rgba(100, 100, 100, 0.4); color: #aaa; border-radius: 8px; padding: 4px 8px; margin: 2px 4px; }
-    .msg-screen { background: #1a1a2e; border: 1px solid #444; color: #ddd; border-radius: 12px; padding: 6px 10px; margin: 2px 4px; }
-    entry { background: #222; color: #eee; border-color: #555; border-radius: 16px; padding: 6px 10px; }
-    entry:focus { border-color: #FF8FA0; }
-    button { background: #FF8FA0; color: white; border-radius: 16px; }
+    .chat-window {
+        background-color: #1a1a1e;
+        border-radius: 16px;
+    }
+    .bubble {
+        background: rgba(255, 255, 255, 0.95);
+        border: 2px solid #FFB3C1;
+        border-radius: 14px;
+    }
+    .chat-header {
+        background: linear-gradient(135deg, #4a3548, #3d2b3a);
+        border-radius: 14px;
+        color: white;
+        font-weight: bold;
+    }
+    .chat-scroll {
+        background: transparent;
+    }
+    .msg-user {
+        background: #5c3d5e;
+        color: white;
+        border-radius: 20px;
+        padding: 8px 16px;
+        margin: 2px 4px;
+    }
+    .msg-neko {
+        background: #333338;
+        color: #eee;
+        border-radius: 20px;
+        padding: 8px 16px;
+        margin: 2px 4px;
+    }
+    .msg-system {
+        color: #777;
+        border-radius: 8px;
+        padding: 4px 8px;
+        margin: 4px 0;
+    }
+    .msg-screen {
+        background: #2a2a30;
+        color: #ccc;
+        border-radius: 20px;
+        padding: 8px 16px;
+        margin: 2px 4px;
+    }
+    .input-bar {
+        background: #e91e8c;
+        border-radius: 26px;
+        padding: 4px;
+    }
+    .chat-entry {
+        background: #2a2030;
+        color: #ddd;
+        border: none;
+        border-radius: 22px;
+        padding: 8px 14px;
+        caret-color: #FFB3C1;
+    }
+    .chat-entry:focus {
+        border: none;
+    }
+    .send-btn {
+        background: transparent;
+        color: #1a1a1e;
+        border: none;
+        border-radius: 22px;
+    }
+    .send-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
+    .screen-btn {
+        background: transparent;
+        color: #1a1a1e;
+        border: none;
+        border-radius: 22px;
+    }
+    .screen-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
     """
     provider = Gtk.CssProvider()
     provider.load_from_data(css)
