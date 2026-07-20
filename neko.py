@@ -190,6 +190,7 @@ class ChatWindow(Gtk.Window):
         self.set_keep_above(True)
         self.set_resizable(False)
         self.on_send = on_send
+        self.get_style_context().add_class('chat-window')
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
@@ -256,15 +257,15 @@ class ChatWindow(Gtk.Window):
             label.get_style_context().add_class('msg-user')
             label.set_xalign(1)
         elif msg_type == "system":
-            label.set_markup(f'<span foreground="#8B6F63" font_size="small">{GLib.markup_escape_text(text)}</span>')
+            label.set_markup(f'<span foreground="#aaa" font_size="small">{GLib.markup_escape_text(text)}</span>')
             label.get_style_context().add_class('msg-system')
             label.set_xalign(0.5)
         elif msg_type == "screen":
-            label.set_markup(f'<span foreground="#6B4E3D">{GLib.markup_escape_text(text)}</span>')
+            label.set_markup(f'<span foreground="#ddd">{GLib.markup_escape_text(text)}</span>')
             label.get_style_context().add_class('msg-screen')
             label.set_xalign(0)
         else:
-            label.set_markup(f'<span foreground="#4A3728">{GLib.markup_escape_text(text)}</span>')
+            label.set_markup(f'<span foreground="#eee">{GLib.markup_escape_text(text)}</span>')
             label.get_style_context().add_class('msg-neko')
             label.set_xalign(0)
         self.msg_box.pack_start(label, False, False, 0)
@@ -505,12 +506,16 @@ class NekoAssistant(Gtk.Window):
 
 def apply_css():
     css = b"""
+    .chat-window { background-color: #111; }
     .bubble { background: rgba(255, 255, 255, 0.95); border: 2px solid #FFB3C1; border-radius: 14px; }
     .chat-header { background: linear-gradient(135deg, #FF8FA0, #FF6B81); color: white; font-weight: bold; }
     .msg-user { background: #FF8FA0; border-radius: 12px; padding: 6px 10px; margin: 2px 4px; }
-    .msg-neko { background: white; border: 1px solid #FFD5DE; border-radius: 12px; padding: 6px 10px; margin: 2px 4px; }
-    .msg-system { background: rgba(255, 179, 193, 0.2); border-radius: 8px; padding: 4px 8px; margin: 2px 4px; }
-    .msg-screen { background: #FFF8E7; border: 1px solid #FFD59E; border-radius: 12px; padding: 6px 10px; margin: 2px 4px; }
+    .msg-neko { background: #2a2a2a; border: 1px solid #444; color: #eee; border-radius: 12px; padding: 6px 10px; margin: 2px 4px; }
+    .msg-system { background: rgba(100, 100, 100, 0.4); color: #aaa; border-radius: 8px; padding: 4px 8px; margin: 2px 4px; }
+    .msg-screen { background: #1a1a2e; border: 1px solid #444; color: #ddd; border-radius: 12px; padding: 6px 10px; margin: 2px 4px; }
+    entry { background: #222; color: #eee; border-color: #555; border-radius: 16px; padding: 6px 10px; }
+    entry:focus { border-color: #FF8FA0; }
+    button { background: #FF8FA0; color: white; border-radius: 16px; }
     """
     provider = Gtk.CssProvider()
     provider.load_from_data(css)
