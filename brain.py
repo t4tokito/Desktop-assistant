@@ -96,12 +96,20 @@ class NekoBrain:
             if resp.status_code == 200:
                 data = resp.json().get("fields", {})
                 self.user_name = data.get("name", {}).get("stringValue") or None
-                facts_raw = data.get("facts", {}).get("stringValue")
+                facts_field = data.get("facts", {})
+                facts_raw = facts_field.get("stringValue")
                 if facts_raw:
-                    self.user_facts = json.loads(facts_raw)
-                corrections_raw = data.get("corrections", {}).get("stringValue")
+                    try:
+                        self.user_facts = json.loads(facts_raw)
+                    except Exception:
+                        self.user_facts = []
+                corrections_field = data.get("corrections", {})
+                corrections_raw = corrections_field.get("stringValue")
                 if corrections_raw:
-                    self.corrections = json.loads(corrections_raw)
+                    try:
+                        self.corrections = json.loads(corrections_raw)
+                    except Exception:
+                        self.corrections = []
 
             resp = requests.get(f"{FIREBASE_URL}/users/t4tokito/summary/latest",
                 params={"key": FIREBASE_CONFIG["apiKey"]}, timeout=10)
@@ -127,7 +135,7 @@ class NekoBrain:
     def _fetch_all_conversations(self):
         try:
             resp = requests.get(f"{FIREBASE_URL}/users/t4tokito/conversations",
-                params={"key": FIREBASE_CONFIG["apiKey"], "orderBy": "timestamp", "limit": "100"},
+                params={"key": FIREBASE_CONFIG["apiKey"], "orderBy": "timestamp", "pageSize": "100"},
                 timeout=15)
             if resp.status_code == 200:
                 return [
@@ -142,7 +150,7 @@ class NekoBrain:
     def _fetch_recent_for_context(self):
         try:
             resp = requests.get(f"{FIREBASE_URL}/users/t4tokito/conversations",
-                params={"key": FIREBASE_CONFIG["apiKey"], "orderBy": "timestamp desc", "limit": "20"},
+                params={"key": FIREBASE_CONFIG["apiKey"], "orderBy": "timestamp desc", "pageSize": "20"},
                 timeout=10)
             if resp.status_code == 200:
                 self.conversation_history = [
